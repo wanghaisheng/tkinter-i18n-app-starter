@@ -1,9 +1,11 @@
-import logging,os
+import logging,os,queue
 import tkinter as tk
 from tkinter import OptionMenu, filedialog,ttk
 import tkinter.scrolledtext as ScrolledText
+import pyperclip as clip
 
-
+#https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget/ 
+# thanks for this great  guy sharing
 
 logging.basicConfig(filename='test.log',
     level=logging.DEBUG, 
@@ -14,6 +16,88 @@ logging.basicConfig(filename='test.log',
 logger = logging.getLogger()      
 
 
+class QueueHandler(logging.Handler):
+    """Class to send logging records to a queue
+
+    It can be used from different threads
+    """
+
+    def __init__(self, log_queue):
+        super().__init__()
+        self.log_queue = log_queue
+
+    def emit(self, record):
+        self.log_queue.put(record)
+        
+
+
+class ConsoleUi:
+    """Poll messages from a logging queue and display them in a scrolled text widget"""
+
+    def __init__(self, frame,root):
+        self.frame = frame
+        # Create a ScrolledText wdiget
+        self.scrolled_text = ScrolledText.ScrolledText(frame, state='disabled', height=12)
+        
+        self.scrolled_text.bind_all("<Control-c>",self.copy)
+
+
+
+        # Bind right-click event to show context menu
+        self.scrolled_text.bind("<Button-3>", self.show_context_menu)
+
+        self.context_menu = tk.Menu(root, tearoff=0)
+        self.context_menu.add_command(label="Clear All Text", command=self.clear_text)
+            
+        self.scrolled_text.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
+        self.scrolled_text.configure(font='TkFixedFont')
+        self.scrolled_text.tag_config('INFO', foreground='black')
+        self.scrolled_text.tag_config('DEBUG', foreground='gray')
+        self.scrolled_text.tag_config('WARNING', foreground='orange')
+        self.scrolled_text.tag_config('ERROR', foreground='red')
+        self.scrolled_text.tag_config('CRITICAL', foreground='red', underline=1)
+        # Create a logging handler using a queue
+        self.log_queue = queue.Queue()
+        self.queue_handler = QueueHandler(self.log_queue)
+        formatter = logging.Formatter('%(asctime)s: %(message)s')
+        self.queue_handler.setFormatter(formatter)
+        logger.addHandler(self.queue_handler)
+        # Start polling messages from the queue
+        self.frame.after(100, self.poll_log_queue)
+    def clear_text(self):
+
+        self.scrolled_text.configure(state='normal')  # Enable text widget
+        self.scrolled_text.delete(1.0, tk.END)  # Delete all text
+        self.scrolled_text.configure(state='disabled')  # Disable text widget again
+    # Create a right-click context menu
+    def show_context_menu(self,event):
+        self.context_menu.post(event.x_root, event.y_root)
+
+
+    def copy(self,event):
+        try:
+            string = event.widget.selection_get()
+            clip.copy(string)
+        except:
+            pass
+    def display(self, record):
+        msg = self.queue_handler.format(record)
+        self.scrolled_text.configure(state='normal')
+        self.scrolled_text.insert(tk.END, msg + '\n', record.levelname)
+        self.scrolled_text.configure(state='disabled')
+        # Autoscroll to the bottom
+        self.scrolled_text.yview(tk.END)
+
+    def poll_log_queue(self):
+        # Check every 100ms if there is a new message in the queue to display
+        while True:
+            try:
+                record = self.log_queue.get(block=False)
+            except queue.Empty:
+                break
+            else:
+                self.display(record)
+        self.frame.after(100, self.poll_log_queue)
 class TextHandler(logging.Handler):
     # This class allows you to log to a Tkinter Text or ScrolledText widget
     # Adapted from Moshe Kaplan: https://gist.github.com/moshekaplan/c425f861de7bbf28ef06
@@ -118,6 +202,31 @@ def render(root,window,log_frame,lang):
 
 
 
+    Cascade_button = tk.Menubutton(window)
+    # Cascade_button.pack(side=tk.LEFT, padx="2m")
+ 
+     # the primary pulldown
+    Cascade_button.menu = tk.Menu(Cascade_button)
+ 
+     # this is the menu that cascades from the primary pulldown....
+    Cascade_button.menu.choices = tk.Menu(Cascade_button.menu)
+ 
+ 
+     # definition of the menu one level up...
+    Cascade_button.menu.choices.add_command(label='zh',command=lambda:changeDisplayLang('zh'))
+    Cascade_button.menu.choices.add_command(label='en',command=lambda:changeDisplayLang('en'))
+    Cascade_button.menu.add_cascade(label= 'langs',
+                                    
+                                     menu=Cascade_button.menu.choices)    
+    
+
+
+    menubar = tk.Menu(window)
+
+    menubar.add_cascade(label='settings', menu=Cascade_button.menu)    
+
+
+
 
 
 def start(lang):
@@ -158,24 +267,8 @@ def start(lang):
     log_frame.rowconfigure(0, weight=1)
 
 
+    st =ConsoleUi(log_frame,root)
 
-
-    st = ScrolledText.ScrolledText(log_frame,                                      
-                                # width = width, 
-                                #     height = 5, 
-                                    state='disabled')
-
-
-    st.configure(font='TkFixedFont')
-    st.grid(column=0, 
-            row=0, 
-            sticky='nwse',
-            # columnspan=4
-            )
-    global text_handler
-    text_handler = TextHandler(st)
-
-    logger.addHandler(text_handler)    
 
 
     render(root,mainwindow,log_frame,lang)
