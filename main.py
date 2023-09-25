@@ -3,6 +3,9 @@ import tkinter as tk
 from tkinter import OptionMenu, filedialog,ttk
 import tkinter.scrolledtext as ScrolledText
 import pyperclip as clip
+from pystray import MenuItem as item
+import pystray
+from PIL import Image
 
 #https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget/ 
 # thanks for this great  guy sharing
@@ -155,6 +158,8 @@ def docView(frame,ttkframe,lang):
     locale_tkstudio_box.grid(row = 4, column = 1, columnspan = 3, padx=14, pady=15)    
 
     
+    
+    
 def render(root,window,log_frame,lang):
     global doc_frame
     tab_control = ttk.Notebook(window)
@@ -281,7 +286,21 @@ def start(lang):
     # Calculate the initial height of mainwindow based on the percentage
     initial_height = int(float(root.winfo_height()) * mainwindow_initial_percentage)
     mainwindow.config(height=initial_height)
-    
+
+def quit_window(icon, item):
+    icon.stop()
+    root.destroy()
+
+def show_window(icon, item):
+    icon.stop()
+    root.after(0,root.deiconify)
+
+def withdraw_window():  
+    root.withdraw()
+    image = Image.open("assets/icon.ico")
+    menu = (item('Quit', quit_window), item('Show', show_window))
+    icon = pystray.Icon("name", image, "title", menu)
+    icon.run_detached()
 def changeDisplayLang(lang):
 
     mainwindow.destroy()
@@ -300,5 +319,7 @@ if __name__ == '__main__':
     global root,st
     root = tk.Tk()
     start('en')
+    root.protocol('WM_DELETE_WINDOW', withdraw_window)
+    
     root.mainloop()
 
