@@ -25,8 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 async def one_url(url):
     """One task."""
+    print(f'run one_url: {url}')  # for debug
     sec = random.randint(1, 8)
     await asyncio.sleep(sec)
     return "url: {}\tsec: {}".format(url, sec)
@@ -38,14 +40,12 @@ async def do_urls():
     completed, pending = await asyncio.wait(tasks)
     results = [task.result() for task in completed]
     print("\n".join(results))
-def _asyncio_thread(async_loop):
-    async_loop.run_until_complete(do_urls())
-
 
 
 def do_tasks(async_loop):
     """Button-Event-Handler starting the asyncio part."""
-    threading.Thread(target=_asyncio_thread, args=(async_loop,)).start()
+    asyncio.ensure_future(do_urls(), loop=async_loop)
+
 
 def start(lang, root=None, async_loop=None):
     global mainwindow, canvas
@@ -55,19 +55,18 @@ def start(lang, root=None, async_loop=None):
     root.title('tkinter asyncio demo')
     Button(master=root, text="Asyncio Tasks", command=lambda: do_tasks(async_loop)).pack()
 
-
     root.update_idletasks()
 
+
 async def wait():
-
-
     try:
         tasks = asyncio.all_tasks(loop)
         print(f'========{tasks}')
         for task in tasks:
             try:
                 # await asyncio.sleep(3600)
-                await task.cancel()
+                cancel_ok = task.cancel()
+                print(cancel_ok, task)
             except asyncio.exceptions.CancelledError:
                 print("done")
 
@@ -79,7 +78,6 @@ async def wait():
 
 
 def quit_window(icon, item):
-
     global loop, fastapi_thread
 
     print('Shutdown icon')
@@ -91,66 +89,16 @@ def quit_window(icon, item):
     asyncio.run_coroutine_threadsafe(server.shutdown(), loop)
 
     print('Shutdown root')
-    root.destroy()
+    root.quit()
 
-    print('Wait for server and loop to finish')
-    asyncio.run_coroutine_threadsafe(wait(), loop)
+    # print('Wait for server and loop to finish')
+    # asyncio.run_coroutine_threadsafe(wait(), loop)
 
     print('Stop loop')
-    loop.stop()
-def quit_window1(icon, item):
-    global loop,fastapi_thread
-
-    print('shutdown icon')
-
-    icon.stop()
+    # loop.stop()
 
 
 
-    print('shutdown server')
-    server.should_exit = True
-    server.force_exit = True
-    asyncio.run(server.shutdown())
-
-    print(f'0:{asyncio.all_tasks(loop)}')
-    try:
-        if loop.is_running():
-            # _logger.debug("Asked running asyncio loop to stop.")
-            loop.call_soon_threadsafe(loop.stop)
-            tasks = asyncio.all_tasks(loop)
-            print(tasks,'========')
-            for task in tasks:
-                try:
-                    # await asyncio.sleep(3600)
-                    task.cancel()
-                    with suppress(CancelledError):
-                        loop.run_until_complete(task)
-                except asyncio.exceptions.CancelledError:
-                    print("done")
-
-
-    except RuntimeError as err:
-        print('SIGINT or SIGTSTP raised')
-        print("cleaning and exiting")
-        sys.exit(1)
-    print('shutdown root')
-
-    root.destroy()
-
-    asyncio.run(wait())
-
-    print('close loop')
-
-
-
-    print(f'1:{asyncio.all_tasks(loop)}')
-    # loop.close()
-    print('stop loop')
-
-    loop.stop()
-    # loop.run_until_complete(asyncio.gather(*[shutdown()]))
-    # import os
-    # os._exit(0)
 
 def show_window(icon, item):
     icon.stop()
@@ -166,6 +114,7 @@ def withdraw_window():
     # icon.run_detached()
     icon.run()
 
+
 def start_fastapi_server(loop):
     import uvicorn
     global server
@@ -180,10 +129,8 @@ def start_fastapi_server(loop):
             task.cancel()
         # Optionally: Close any open resources (sockets, files, etc.)
         # Cleanup code here
-    finally:
-        loop.close()
-
-
+    # finally:
+    #     loop.close()
 
 
 def start_tkinter_app(async_loop):
@@ -195,16 +142,19 @@ def start_tkinter_app(async_loop):
 
     root.protocol('WM_DELETE_WINDOW', withdraw_window)
 
-
     root.mainloop()
 
 
-
-
 if __name__ == "__main__":
-    global loop,fastapi_thread
-    loop=None
+    global loop, fastapi_thread
+    loop = None
+
+    if sys.platform == "win32" and (3, 8, 0) <= sys.version_info < (3, 9, 0):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
     if sys.platform == 'win32':
+
         asyncio.get_event_loop().close()
         # On Windows, the default event loop is SelectorEventLoop, which does
         # not support subprocesses. ProactorEventLoop should be used instead.
@@ -215,12 +165,7 @@ if __name__ == "__main__":
         loop = asyncio.get_event_loop()
 
     # Start FastAPI server in a separate thread
-    fastapi_thread = threading.Thread(target=start_fastapi_server,args=(
-            loop,)).start()
-
+    fastapi_thread = threading.Thread(target=start_fastapi_server, args=(loop,)).start()
 
     start_tkinter_app(loop)
-    # loop.run_forever()
-    # loop.close()
-    fastapi_thread.join()
-    loop.close()
+
