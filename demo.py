@@ -1,115 +1,148 @@
+import sys
 from tkinter import *
-from tkinter import messagebox
+from pystray import MenuItem as item
+import pystray
+from PIL import Image, ImageTk
 import asyncio
-import threading
+import tkinter as tk
+from asyncio import CancelledError
+from contextlib import suppress
 import random
+from async_tkinter_loop import async_handler, async_mainloop
+from asyncio.subprocess import Process
+from typing import Optional
+import platform
 
-def _asyncio_thread(async_loop):
-    async_loop.run_until_complete(do_urls())
+uvicorn_subprocess: Optional[Process] = None
 
 
-def do_tasks(async_loop):
-    """ Button-Event-Handler starting the asyncio part. """
-    threading.Thread(target=_asyncio_thread, args=(async_loop,)).start()
+console_encoding = "utf-8"
 
-    
+if platform.system() == "Windows":
+    from ctypes import windll
+
+    console_code_page = windll.kernel32.GetConsoleOutputCP()
+    if console_code_page != 65001:
+        console_encoding = f"cp{console_code_page}"
+
+
+
 async def one_url(url):
-    """ One task. """
+    """One task."""
+    print(f'run one_url: {url}')  # for debug
     sec = random.randint(1, 8)
     await asyncio.sleep(sec)
-    return 'url: {}\tsec: {}'.format(url, sec)
+    return "url: {}\tsec: {}".format(url, sec)
+
 
 async def do_urls():
-    """ Creating and starting 10 tasks. """
+    """Creating and starting 10 tasks."""
     tasks = [one_url(url) for url in range(10)]
     completed, pending = await asyncio.wait(tasks)
     results = [task.result() for task in completed]
-    print('\n'.join(results))
+    print("\n".join(results))
 
-
-def do_freezed():
-    messagebox.showinfo(message='Tkinter is reacting.')
-
-def main(async_loop):
-    root = Tk()
-    Button(master=root, text='Asyncio Tasks', command= lambda:do_tasks(async_loop)).pack()
-    Button(master=root, text='Freezed???', command=do_freezed).pack()
-    root.mainloop()
-
-if __name__ == '__main__':
-    async_loop = asyncio.get_event_loop()
-    main(async_loop)
-Share
-Improve this answer
-Follow
-edited Sep 1, 2021 at 13:01
-TheLizzard's user avatar
-TheLizzard
-7,36322 gold badges1111 silver badges3131 bronze badges
-answered Dec 21, 2017 at 7:40
-bhaskarc's user avatar
-bhaskarc
-9,3001010 gold badges6565 silver badges8787 bronze badges
-3
-What is the reason for calling asyncio.get_event_loop() in the main thread instead of in the worker thread? – 
-Brent
- Nov 11, 2020 at 1:58
-Why did you use buttonX = Button(...).pack()? Please look at this to see the problem. – 
-TheLizzard
- Aug 31, 2021 at 9:13
-1
-@TheLizzard - Yes you are right about it. However since we do not use buttonX variable after that line, it really doesn't mater in this example. – 
-bhaskarc
- Sep 1, 2021 at 12:32
-2
-@bhaskarc It can confuse people that see this in the future. It's better to just use Button(...).pack(). So many new people make this mistake. – 
-TheLizzard
- Sep 1, 2021 at 13:01
-Add a comment
-4
-
-I'm a bit late to the party but if you are not targeting Windows you can use aiotkinter to achieve what you want. I modified your code to show you how to use this package:
-
-from tkinter import *
-from tkinter import messagebox
-import asyncio
-import random
-
-import aiotkinter
-
-def do_freezed():
-    """ Button-Event-Handler to see if a button on GUI works. """
-    messagebox.showinfo(message='Tkinter is reacting.')
 
 def do_tasks():
-    task = asyncio.ensure_future(do_urls())
-    task.add_done_callback(tasks_done)
+    """Button-Event-Handler starting the asyncio part."""
+    asyncio.ensure_future(do_urls())
 
-def tasks_done(task):
-    messagebox.showinfo(message='Tasks done.')
 
-async def one_url(url):
-    """ One task. """
-    sec = random.randint(1, 15)
-    await asyncio.sleep(sec)
-    return 'url: {}\tsec: {}'.format(url, sec)
+def start(lang, root=None):
+    global mainwindow, canvas
 
-async def do_urls():
-    """ Creating and starting 10 tasks. """
-    tasks = [
-        one_url(url)
-        for url in range(10)
-    ]
-    completed, pending = await asyncio.wait(tasks)
-    results = [task.result() for task in completed]
-    print('\n'.join(results))
+    # root.resizable(width=True, height=True)
+    root.iconbitmap("assets/icon.ico")
+    root.title('tkinter asyncio demo')
+    Button(master=root, text="Asyncio Tasks", command=async_handler(do_tasks())).pack()
+    Button(master=root, text="Start Server", command=start_fastapi_server).pack(side=tk.LEFT)
 
-if __name__ == '__main__':
-    asyncio.set_event_loop_policy(aiotkinter.TkinterEventLoopPolicy())
-    loop = asyncio.get_event_loop()
-    root = Tk()
-    buttonT = Button(master=root, text='Asyncio Tasks', command=do_tasks)
-    buttonT.pack()
-    buttonX = Button(master=root, text='Freezed???', command=do_freezed)
-    buttonX.pack()
-    loop.run_forever()
+    Button(master=root, text="Stop Server", command=stop).pack(side=tk.LEFT)
+
+    root.update_idletasks()
+
+
+def quit_window(icon):
+
+    print('Shutdown icon')
+    icon.stop()
+
+    print('Shutdown server')
+    if uvicorn_subprocess is not None:
+        uvicorn_subprocess.kill()
+    print('Shutdown root')
+    # https://github.com/insolor/async-tkinter-loop/issues/10
+    root.quit()
+    root.destroy()
+
+
+
+
+def show_window(icon, item):
+    icon.stop()
+    root.after(0, root.deiconify)
+
+
+def withdraw_window():
+    root.withdraw()
+    image = Image.open("assets/icon.ico")
+
+    menu = (item("Quit", lambda icon:quit_window(icon)),
+            item("Show", show_window))
+
+    
+    icon = pystray.Icon("name", image, "title", menu)
+    icon.run()
+
+
+@async_handler
+async def start_fastapi_server():
+    global uvicorn_subprocess
+    uvicorn_command = ["uvicorn", "fastapiserver:app", "--host", "0.0.0.0", "--port", "8000"]
+
+    uvicorn_subprocess = await asyncio.create_subprocess_exec(
+        *uvicorn_command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    while uvicorn_subprocess.returncode is None:
+        stdout = asyncio.create_task(uvicorn_subprocess.stdout.readline())
+        stderr = asyncio.create_task(uvicorn_subprocess.stderr.readline())
+
+        done, pending = await asyncio.wait({stdout, stderr}, return_when=asyncio.FIRST_COMPLETED)
+
+        if stdout in done:
+            result_text = stdout.result().decode(console_encoding)
+            print(f'stdout:{result_text}')
+
+        if stderr in done:
+            result_text = stderr.result().decode(console_encoding)
+            print(f'stderr:{result_text}')
+
+        for item in pending:
+            item.cancel()
+
+    uvicorn_subprocess = None
+def stop():
+    if uvicorn_subprocess is not None:
+        uvicorn_subprocess.kill()
+
+
+
+def start_tkinter_app():
+    global root, settings, db, canvas, locale
+    root = tk.Tk()
+
+    locale = 'en'
+    start(locale, root)
+
+    root.protocol('WM_DELETE_WINDOW', withdraw_window)
+
+    async_mainloop(root)
+
+
+
+
+if __name__ == "__main__":
+    start_tkinter_app()
