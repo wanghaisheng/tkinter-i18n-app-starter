@@ -43,10 +43,6 @@ async def do_urls():
     print("\n".join(results))
 
 
-def do_tasks():
-    """Button-Event-Handler starting the asyncio part."""
-    asyncio.ensure_future(do_urls())
-
 
 def start(lang, root=None):
     global mainwindow, canvas
@@ -54,7 +50,7 @@ def start(lang, root=None):
     # root.resizable(width=True, height=True)
     root.iconbitmap("assets/icon.ico")
     root.title('tkinter asyncio demo')
-    Button(master=root, text="Asyncio Tasks", command=async_handler(do_tasks())).pack()
+    Button(master=root, text="Asyncio Tasks", command=async_handler(do_urls)).pack()
     Button(master=root, text="Start Server", command=start_fastapi_server).pack(side=tk.LEFT)
 
     Button(master=root, text="Stop Server", command=stop).pack(side=tk.LEFT)
