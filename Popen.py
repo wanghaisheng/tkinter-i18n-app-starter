@@ -65,7 +65,10 @@ def quit_window(icon):
 
     print('Shutdown server')
     if uvicorn_subprocess is not None:
-        uvicorn_subprocess.kill()
+        uvicorn_subprocess.terminate() 
+        time.sleep(0.5)
+        uvicorn_subprocess.poll()
+
     print('Shutdown root')
     # https://github.com/insolor/async-tkinter-loop/issues/10
     root.quit()
@@ -90,39 +93,20 @@ def withdraw_window():
     icon = pystray.Icon("name", image, "title", menu)
     icon.run()
 
+# https://stackoverflow.com/questions/4789837/how-to-terminate-a-python-subprocess-launched-with-shell-true
 
-@async_handler
-async def start_fastapi_server():
+def start_fastapi_server():
     global uvicorn_subprocess
     uvicorn_command = ["uvicorn", "fastapiserver:app", "--host", "0.0.0.0", "--port", "8000"]
+    uvicorn_subprocess = Popen(uvicorn_command) 
 
-    uvicorn_subprocess = await asyncio.create_subprocess_exec(
-        *uvicorn_command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
 
-    while uvicorn_subprocess.returncode is None:
-        stdout = asyncio.create_task(uvicorn_subprocess.stdout.readline())
-        stderr = asyncio.create_task(uvicorn_subprocess.stderr.readline())
 
-        done, pending = await asyncio.wait({stdout, stderr}, return_when=asyncio.FIRST_COMPLETED)
-
-        if stdout in done:
-            result_text = stdout.result().decode(console_encoding)
-            print(f'stdout:{result_text}')
-
-        if stderr in done:
-            result_text = stderr.result().decode(console_encoding)
-            print(f'stderr:{result_text}')
-
-        for item in pending:
-            item.cancel()
-
-    uvicorn_subprocess = None
 def stop():
     if uvicorn_subprocess is not None:
-        uvicorn_subprocess.kill()
+        uvicorn_subprocess.terminate() 
+        time.sleep(0.5)
+        uvicorn_subprocess.poll()
 
 
 
