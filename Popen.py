@@ -9,15 +9,16 @@ from asyncio import CancelledError
 from contextlib import suppress
 import random
 from async_tkinter_loop import async_handler, async_mainloop
-from asyncio.subprocess import Process
 from typing import Optional
 import platform
-
-uvicorn_subprocess: Optional[Process] = None
-
+import time
+import shlex, subprocess
+from batchrunworker import BatchWorker
+from string import ascii_uppercase
+import threading
 
 console_encoding = "utf-8"
-
+uvicorn_subprocess=None
 if platform.system() == "Windows":
     from ctypes import windll
 
@@ -27,30 +28,32 @@ if platform.system() == "Windows":
 
 
 
-async def one_url(url):
-    """One task."""
-    print(f'run one_url: {url}')  # for debug
-    sec = random.randint(1, 8)
-    await asyncio.sleep(sec)
-    return "url: {}\tsec: {}".format(url, sec)
+async def task(name: str):
+    print(f"Task '{name}' is running...")
+    if name=='A':
+        print('task failed')
+    else:
+        print('task ok')
+    await asyncio.sleep(3)  # Pretend to do something
+TASK_NAMES = ascii_uppercase  # 26 fake tasks in total
 
+async def do_tasks(BATCH_SIZE=3):
+    tasks = [task(name) for name in TASK_NAMES]
+    worker = BatchWorker(tasks,BATCH_SIZE=BATCH_SIZE)
+    await worker.run()
 
-async def do_urls():
-    """Creating and starting 10 tasks."""
-    tasks = [one_url(url) for url in range(10)]
-    completed, pending = await asyncio.wait(tasks)
-    results = [task.result() for task in completed]
-    print("\n".join(results))
-
-
-
+def do_tasks_wrap(i=0):
+    print('55555555555555',i)
+    asyncio.run(do_tasks(BATCH_SIZE=i))
 def start(lang, root=None):
     global mainwindow, canvas
 
     # root.resizable(width=True, height=True)
     root.iconbitmap("assets/icon.ico")
     root.title('tkinter asyncio demo')
-    Button(master=root, text="Asyncio Tasks", command=async_handler(do_urls)).pack()
+    Button(master=root, text="Asyncio Tasks", command=lambda:threading.Thread(target=do_tasks_wrap, args=(5,)).start()).pack()
+
+
     Button(master=root, text="Start Server", command=start_fastapi_server).pack(side=tk.LEFT)
 
     Button(master=root, text="Stop Server", command=stop).pack(side=tk.LEFT)
@@ -98,17 +101,24 @@ def withdraw_window():
 def start_fastapi_server():
     global uvicorn_subprocess
     uvicorn_command = ["uvicorn", "fastapiserver:app", "--host", "0.0.0.0", "--port", "8000"]
-    uvicorn_subprocess = Popen(uvicorn_command) 
-
+    uvicorn_subprocess = subprocess.Popen(uvicorn_command) 
+    try:
+        outs, errs = uvicorn_subprocess.communicate(timeout=15)
+    except subprocess.TimeoutExpired:
+        uvicorn_subprocess.kill()
+        outs, errs = uvicorn_subprocess.communicate()
 
 
 def stop():
     if uvicorn_subprocess is not None:
         uvicorn_subprocess.terminate() 
         time.sleep(0.5)
-        uvicorn_subprocess.poll()
+        done=uvicorn_subprocess.poll()
+        if done==None:
+            print(f'server shutdown error :{done}')
 
-
+        else:
+            print('server shutdown')
 
 def start_tkinter_app():
     global root, settings, db, canvas, locale
