@@ -2,9 +2,9 @@ from functools import lru_cache
 
 from pyupdater.client import Client as PyUpdaterClient
 
-from kanmail.log import logger
-from kanmail.settings.constants import APP_NAME, FROZEN, PyUpdaterConfig
-from kanmail.version import get_version_data
+from .log import logger
+from .constants import APP_NAME, FROZEN, PyUpdaterConfig
+from .version import get_version_data
 
 
 @lru_cache(maxsize=1)
