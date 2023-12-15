@@ -60,14 +60,25 @@ def start(lang, root=None):
     root.update_idletasks()
 
 
-def quit_window(icon):
 
-    print('Shutdown icon')
+
+
+
+def quit_window(icon, item):
+    print('prepare to quit uploader genius program')
+
+    print('cancel all waiting tasks')
+
+    # threading.Thread(
+    #             target=cancerlall()
+    #         ).start()
+    cancel_all_waiting_tasks(frame=None)
+    # print('Shutdown icon')
     icon.stop()
 
-    print('Shutdown server')
+    print('Shutdown thumbnail genius server')
     if uvicorn_subprocess is not None:
-        uvicorn_subprocess.terminate() 
+        uvicorn_subprocess.terminate()
         time.sleep(0.5)
         done=uvicorn_subprocess.poll()
         if done==None:
@@ -77,10 +88,55 @@ def quit_window(icon):
             print('server shutdown')
     else:
         print('server not started')
-    print('Shutdown root')
-    # https://github.com/insolor/async-tkinter-loop/issues/10
-    root.quit()
-    root.destroy()
+    try:
+        uvicorn_subprocess
+        if uvicorn_subprocess.returncode is  None:
+            print('check result server is there ')
+            parent = psutil.Process(uvicorn_subprocess.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+        else:
+            print('check result server is shutdown already')
+    except:
+        print('check result server is shutdown already')
+
+
+    # print(' check what threads are still open at the end of your program.')
+    # print(threading.enumerate())
+    # main_thread = threading.current_thread()
+
+    # for t in threading.enumerate():
+    #     if t is main_thread:
+    #         continue
+    #     print(f"joining {t.getName()} ")
+    #     logger.debug('joining %s', t.getName())
+    #     threading.Event().set()
+
+    # print('here')
+    print('quit uploader genius program now')
+
+
+    # windows and mac act differently
+    if sys.platform == 'win32':
+        current_system_pid = os.getpid()
+
+        ThisSystem = psutil.Process(current_system_pid)
+        ThisSystem.terminate()
+        os._exit(1)
+    elif  sys.platform=='darwin':
+
+        print('Shutdown root')
+        # https://github.com/insolor/async-tkinter-loop/issues/10
+
+        root.quit()
+
+        root.destroy()
+
+    else:
+        import signal
+
+        os.kill(os.getpid(), signal.SIGINT)
 
 
 
@@ -92,27 +148,36 @@ def show_window(icon, item):
 
 def withdraw_window():
     root.withdraw()
-    image = Image.open("assets/icon.ico")
+    iconfile = os.path.join(ROOT_DIR, iconfilename)
 
-    menu = (item("Quit", lambda icon:quit_window(icon)),
-            item("Show", show_window))
-
-    
+    image = Image.open(iconfile)
+    menu = (item("Quit", quit_window), item("Show", show_window))
     icon = pystray.Icon("name", image, "title", menu)
-    icon.run()
+    icon.run_detached()
+    # icon.run()
 
-# https://stackoverflow.com/questions/4789837/how-to-terminate-a-python-subprocess-launched-with-shell-true
 
 def start_fastapi_server():
     global uvicorn_subprocess
-    uvicorn_command = ["uvicorn", "fastapiserver:app", "--host", "0.0.0.0", "--port", "8000"]
-    uvicorn_subprocess = subprocess.Popen(uvicorn_command) 
+    print('start thumbnail template editor server',ROOT_DIR)
+    lib_folder = os.path.join(ROOT_DIR, 'lib')
+
+    uvicorn_command = ["uvicorn", "src.app.fastapiserver:app", "--host", "0.0.0.0", "--port", "8000"]
+    # uvicorn_subprocess = subprocess.Popen(uvicorn_command)
+    uvicorn_subprocess = subprocess.Popen(uvicorn_command, cwd=lib_folder if getattr(sys, "frozen", False) else None)
+
+    # fastapiserver.app.mount("/static", StaticFiles(directory=os.path.join(ROOT_DIR,"static")), name="static")
+
+
     try:
         outs, errs = uvicorn_subprocess.communicate(timeout=15)
     except subprocess.TimeoutExpired:
-        uvicorn_subprocess.kill()
+        # uvicorn_subprocess.kill()
         outs, errs = uvicorn_subprocess.communicate()
-
+    if outs:
+        print(f'stdout:{outs}')
+    if errs:
+        print(f'stdout:{errs}')
 
 def stop():
     if uvicorn_subprocess is not None:
