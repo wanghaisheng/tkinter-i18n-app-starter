@@ -7,6 +7,24 @@ from pystray import MenuItem as item
 import pystray
 from PIL import Image
 
+
+#be aware about this folder issue can cause all kinds file not found 
+
+if getattr(sys, 'frozen', False):
+    # The application is frozen
+    datadir = os.path.dirname(sys.executable)
+else:
+    # The application is not frozen
+    datadir = os.path.dirname(__file__)
+
+# https://stackoverflow.com/questions/56733085/how-to-know-the-current-file-path-after-being-frozen-into-an-executable-using-cx
+ROOT_DIR = datadir
+
+
+
+
+
+
 #https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget/ 
 # thanks for this great  guy sharing
 
